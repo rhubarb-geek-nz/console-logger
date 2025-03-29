@@ -1,0 +1,39 @@
+#include "windows.h"
+
+#ifndef DEPVERS_conlog_STR4
+#	define DEPVERS_conlog_STR4 "0.0.0.0"
+#endif
+
+#ifndef DEPVERS_conlog_INT4
+#	define DEPVERS_conlog_INT4 0,0,0,0
+#endif
+
+1 VERSIONINFO
+ FILEVERSION DEPVERS_conlog_INT4
+ PRODUCTVERSION DEPVERS_conlog_INT4
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS VS_FF_PRERELEASE
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904e4"
+        BEGIN
+            VALUE "Comments", "See https://github.com/rhubarb-geek-nz/console-logger\0"
+            VALUE "CompanyName", "rhubarb-geek-nz\0"
+            VALUE "FileDescription", "Console Logger\0"
+            VALUE "FileVersion", DEPVERS_conlog_STR4
+            VALUE "InternalName", "conlog\0"
+            VALUE "LegalCopyright", L"\x00A9 Roger Brown. 2025\0"
+            VALUE "OriginalFilename", "CONLOG.EXE\0"
+            VALUE "ProductName", "conlog\0"
+            VALUE "ProductVersion", DEPVERS_conlog_STR4
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1252
+    END
+END

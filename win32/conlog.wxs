@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="Console Logger" Language="1033" Version="$(env.DEPVERS_conlog_STR4)" Manufacturer="rhubarb-geek-nz" UpgradeCode="$(env.UPGRADECODE)">
+    <Package InstallerVersion="$(env.INSTALLERVERSION)" Compressed="yes" InstallScope="perMachine" Platform="$(env.PRODUCTARCH)" Description="Console Logger application" Comments="See https://github.com/rhubarb-geek-nz/console-logger" />
+    <MediaTemplate EmbedCab="yes" />
+    <Feature Id="ProductFeature" Title="setup" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+    <Upgrade Id="{$(env.UPGRADECODE)}">
+      <UpgradeVersion Maximum="$(env.DEPVERS_conlog_STR4)" Property="OLDPRODUCTFOUND" OnlyDetect="no" IncludeMinimum="yes" IncludeMaximum="no" />
+    </Upgrade>
+    <InstallExecuteSequence>
+      <RemoveExistingProducts After="InstallInitialize" />
+    </InstallExecuteSequence>
+  </Product>
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="$(env.PRODUCTSYSFILES)" />
+      <Directory Id="$(env.PRODUCTPROGFILES)">
+        <Directory Id="COMPANYDIR" Name="rhubarb-geek-nz">
+          <Directory Id="INSTALLDIR" Name="Console Logger" />
+        </Directory>
+      </Directory>
+    </Directory>
+  </Fragment>
+  <Fragment>
+    <ComponentGroup Id="ProductComponents">
+      <Component Id="conlog.exe" Guid="*" Directory="INSTALLDIR" Win64="$(env.PRODUCTWIN64)">
+        <File Id="conlog.exe" KeyPath="yes" Source="bin\$(env.PRODUCTARCH)\conlog.exe" />
+      </Component>
+      <Component Id="README.md" Guid="*" Directory="INSTALLDIR" Win64="$(env.PRODUCTWIN64)">
+        <File Id="README.md" KeyPath="yes" Source="..\README.md" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
