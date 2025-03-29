@@ -200,7 +200,7 @@ int main(int argc, char** argv)
 	CONSOLE_SCREEN_BUFFER_INFO info;
 	int nChannels;
 	struct conlog_output_channel* channel = output.channels;
-	BOOL bHaveConsole = FALSE;
+	BOOL bHaveConsole = FALSE, bWriteError = TRUE;
 
 	ZeroMemory(&info, sizeof(info));
 	ZeroMemory(&output, sizeof(output));
@@ -410,7 +410,12 @@ int main(int argc, char** argv)
 
 										if (GetExitCodeProcess(pi.hProcess, &ex))
 										{
+											bWriteError = FALSE;
 											exitCode = ex;
+										}
+										else
+										{
+											exitCode = GetLastError();
 										}
 
 										SetEvent(input.hQuit);
@@ -482,6 +487,24 @@ int main(int argc, char** argv)
 	}
 
 	SetConsoleMode(input.hRead, input.mode);
+
+	if (bWriteError && exitCode)
+	{
+		char buf[256];
+		DWORD dw = FormatMessageA(
+			FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_FROM_SYSTEM,
+			NULL,
+			exitCode,
+			0,
+			buf,
+			sizeof(buf) - 2,
+			NULL);
+
+		if (dw)
+		{
+			WriteFile(output.channels[1].hWrite, buf, dw, &dw, NULL);
+		}
+	}
 
 	return exitCode;
 }
