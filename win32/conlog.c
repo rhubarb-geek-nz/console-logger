@@ -240,6 +240,8 @@ int main(int argc, char** argv)
 
 	if (output.channels[0].bConsole && output.channels[1].bConsole)
 	{
+		SetConsoleMode(input.hRead, input.mode);
+
 		fprintf(stderr, "Both stdout and stderr are console devices\n");
 		fflush(stderr);
 
@@ -248,6 +250,8 @@ int main(int argc, char** argv)
 
 	if ((!output.channels[0].bConsole) && !output.channels[1].bConsole)
 	{
+		SetConsoleMode(input.hRead, input.mode);
+
 		fprintf(stderr, "No console output\n");
 		fflush(stderr);
 
