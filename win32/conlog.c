@@ -265,6 +265,9 @@ int main(int argc, char** argv)
 	if (output.channels[1].bConsole)
 	{
 		SetStdHandle(STD_OUTPUT_HANDLE, output.channels[1].hWrite);
+	}
+	else
+	{
 		SetStdHandle(STD_ERROR_HANDLE, output.channels[0].hWrite);
 	}
 
