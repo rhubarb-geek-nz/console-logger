@@ -202,6 +202,8 @@ int main(int argc, char** argv)
 	struct conlog_output_channel* channel = output.channels;
 	BOOL bHaveConsole = FALSE, bWriteError = TRUE;
 
+	SetErrorMode(GetErrorMode() | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+
 	ZeroMemory(&info, sizeof(info));
 	ZeroMemory(&output, sizeof(output));
 	ZeroMemory(&input, sizeof(input));
