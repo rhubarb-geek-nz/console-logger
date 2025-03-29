@@ -248,7 +248,7 @@ int main(int argc, char** argv)
 		return ERROR_NOT_SUPPORTED;
 	}
 
-	if ((!output.channels[0].bConsole) && !output.channels[1].bConsole)
+	if (!(output.channels[0].bConsole || output.channels[1].bConsole))
 	{
 		SetConsoleMode(input.hRead, input.mode);
 
