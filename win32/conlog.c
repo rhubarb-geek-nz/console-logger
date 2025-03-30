@@ -335,9 +335,41 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 						}
 						else
 						{
-							char code = 0;
+							char code = 0, cis = '[';
 							int argc = 0;
 							int argv[10];
+							int shift = 0;
+
+							switch (input.Event.KeyEvent.dwControlKeyState & (SHIFT_PRESSED | LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED | LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+							{
+							case SHIFT_PRESSED:
+								shift = 2;
+								break;
+							case SHIFT_PRESSED | LEFT_ALT_PRESSED:
+							case SHIFT_PRESSED | RIGHT_ALT_PRESSED:
+								shift = 4;
+								break;
+							case LEFT_CTRL_PRESSED:
+							case RIGHT_CTRL_PRESSED:
+								shift = 5;
+								break;
+							case SHIFT_PRESSED | LEFT_CTRL_PRESSED:
+							case SHIFT_PRESSED | RIGHT_CTRL_PRESSED:
+								shift = 6;
+								break;
+							case LEFT_ALT_PRESSED | LEFT_CTRL_PRESSED:
+							case LEFT_ALT_PRESSED | RIGHT_CTRL_PRESSED:
+							case RIGHT_ALT_PRESSED | LEFT_CTRL_PRESSED:
+							case RIGHT_ALT_PRESSED | RIGHT_CTRL_PRESSED:
+								shift = 7;
+								break;
+							case SHIFT_PRESSED | LEFT_ALT_PRESSED | LEFT_CTRL_PRESSED:
+							case SHIFT_PRESSED | LEFT_ALT_PRESSED | RIGHT_CTRL_PRESSED:
+							case SHIFT_PRESSED | RIGHT_ALT_PRESSED | LEFT_CTRL_PRESSED:
+							case SHIFT_PRESSED | RIGHT_ALT_PRESSED | RIGHT_CTRL_PRESSED:
+								shift = 8;
+								break;
+							}
 
 							switch (input.Event.KeyEvent.wVirtualKeyCode)
 							{
@@ -374,13 +406,93 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 							case VK_DOWN:
 								code = 'B';
 								break;
+							case VK_F1:
+								if (shift)
+								{
+									argv[argc++] = 1;
+									argv[argc++] = shift;
+								}
+								else
+								{
+									cis = 'O';
+								}
+								code = 'P';
+								break;
+							case VK_F2:
+								if (shift)
+								{
+									argv[argc++] = 1;
+									argv[argc++] = shift;
+								}
+								else
+								{
+									cis = 'O';
+								}
+								code = 'Q';
+								break;
+							case VK_F3:
+								if (shift)
+								{
+									argv[argc++] = 1;
+									argv[argc++] = shift;
+								}
+								else
+								{
+									cis = 'O';
+								}
+								code = 'R';
+								break;
+							case VK_F4:
+								if (shift)
+								{
+									argv[argc++] = 1;
+									argv[argc++] = shift;
+								}
+								else
+								{
+									cis = 'O';
+								}
+								code = 'S';
+								break;
+							case VK_F5:
+								code = '~'; argv[argc++] = 15;
+								if (shift) argv[argc++] = shift;
+								break;
+							case VK_F6:
+								code = '~'; argv[argc++] = 17;
+								if (shift) argv[argc++] = shift;
+								break;
+							case VK_F7:
+								code = '~'; argv[argc++] = 18;
+								if (shift) argv[argc++] = shift;
+								break;
+							case VK_F8:
+								code = '~'; argv[argc++] = 19;
+								if (shift) argv[argc++] = shift;
+								break;
+							case VK_F9:
+								code = '~'; argv[argc++] = 20;
+								if (shift) argv[argc++] = shift;
+								break;
+							case VK_F10:
+								code = '~'; argv[argc++] = 21;
+								if (shift) argv[argc++] = shift;
+								break;
+							case VK_F11:
+								code = '~'; argv[argc++] = 23;
+								if (shift) argv[argc++] = shift;
+								break;
+							case VK_F12:
+								code = '~'; argv[argc++] = 24;
+								if (shift) argv[argc++] = shift;
+								break;
 							}
 
 							if (code)
 							{
 								int i = 0;
 								read_buffer[read_len++] = 27;
-								read_buffer[read_len++] = '[';
+								read_buffer[read_len++] = cis;
 
 								while (i < argc)
 								{
@@ -417,7 +529,6 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 					break;
 
 				default:
-					running = FALSE;
 					break;
 				}
 			}
