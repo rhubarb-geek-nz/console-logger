@@ -30,19 +30,21 @@ struct conlog_output
 	int nChannels;
 	struct conlog_output_channel channels[2];
 	struct conlog_input* input;
+	BYTE buffer[4096];
+	DWORD bufferLength;
 };
 
-void conlog_output_write(struct conlog_output* state, const BYTE* buf, DWORD dwWrite)
+static void conlog_output_flush(struct conlog_output* state)
 {
-	if (dwWrite)
+	if (state->bufferLength)
 	{
 		int nChannels = state->nChannels;
 		struct conlog_output_channel* channel = state->channels;
 
 		while (nChannels--)
 		{
-			const BYTE* p = buf;
-			DWORD len = dwWrite;
+			const BYTE* p = state->buffer;
+			DWORD len = state->bufferLength;
 
 			while (len)
 			{
@@ -67,6 +69,39 @@ void conlog_output_write(struct conlog_output* state, const BYTE* buf, DWORD dwW
 
 			channel++;
 		}
+
+		state->bufferLength = 0;
+	}
+}
+
+static void conlog_output_write(struct conlog_output* state, const BYTE* data, DWORD len)
+{
+	while (len)
+	{
+		DWORD n = sizeof(state->buffer) - state->bufferLength;
+
+		if (n)
+		{
+			if (n > len)
+			{
+				n = len;
+			}
+
+			memcpy(state->buffer + state->bufferLength, data, n);
+
+			data += n;
+			len -= n;
+			state->bufferLength += n;
+		}
+		else
+		{
+			conlog_output_flush(state);
+		}
+	}
+
+	if (state->bufferLength == sizeof(state->buffer))
+	{
+		conlog_output_flush(state);
 	}
 }
 
@@ -120,6 +155,7 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 							offset = 0;
 						}
 						break;
+
 					case 2:
 					case 3:
 						switch (c)
@@ -131,6 +167,7 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 								digitCount = 0;
 							}
 							break;
+
 						case '?':
 							if (escapeCommittee == 2 && colonCount == 0 && digitCount == 0)
 							{
@@ -146,6 +183,7 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 								offset = 0;
 							}
 							break;
+
 						default:
 							if (isdigit(c))
 							{
@@ -177,6 +215,7 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 											}
 										}
 										break;
+
 									case 'l':
 										if (digitCount && (args[0] == 1004))
 										{
@@ -185,6 +224,7 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 										break;
 									}
 									break;
+
 								case 2:
 									switch (c)
 									{
@@ -192,6 +232,8 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 										if (digitCount && (args[0] == 6))
 										{
 											DWORD dw;
+
+											conlog_output_flush(state);
 
 											if (WriteFile(state->hControl, "\002", 1, &dw, NULL) && dw)
 											{
@@ -213,6 +255,7 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 							break;
 						}
 						break;
+
 					default:
 						break;
 					}
@@ -248,6 +291,7 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 		}
 
 		conlog_output_write(state, input, offset);
+		conlog_output_flush(state);
 	}
 
 	return 0;
@@ -379,6 +423,7 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 			}
 
 			break;
+
 		case WAIT_OBJECT_0 + 1:
 			while (running && state->running)
 			{
@@ -400,6 +445,7 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 						case 0:
 							running = FALSE;
 							break;
+
 						case 1:
 							if (state->reportFocus && (state->hasFocus != state->appFocus))
 							{
@@ -428,6 +474,7 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 				}
 			}
 			break;
+
 		default:
 			running = FALSE;
 			break;
