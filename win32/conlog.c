@@ -8,6 +8,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+struct conlog_input
+{
+	DWORD mode;
+	BOOL running, reportFocus, hasFocus, appFocus;
+	HANDLE hRead, hWrite, hEvent, hControl, hScreen;
+	HPCON hPC;
+};
+
 struct conlog_output_channel
 {
 	DWORD mode;
@@ -18,60 +26,228 @@ struct conlog_output_channel
 
 struct conlog_output
 {
-	HANDLE hRead;
+	HANDLE hRead, hControl;
 	int nChannels;
 	struct conlog_output_channel channels[2];
+	struct conlog_input* input;
 };
 
-struct conlog_input
+void conlog_output_write(struct conlog_output* state, const BYTE* buf, DWORD dwWrite)
 {
-	DWORD mode;
-	HANDLE hRead, hWrite, hQuit;
-	HPCON hPC;
-};
+	if (dwWrite)
+	{
+		int nChannels = state->nChannels;
+		struct conlog_output_channel* channel = state->channels;
+
+		while (nChannels--)
+		{
+			const BYTE* p = buf;
+			DWORD len = dwWrite;
+
+			while (len)
+			{
+				DWORD dw;
+				BOOL bWrite;
+
+				if (channel->bConsole)
+				{
+					bWrite = WriteConsoleA(channel->hWrite, p, len, &dw, NULL);
+				}
+				else
+				{
+					bWrite = WriteFile(channel->hWrite, p, len, &dw, NULL);
+				}
+
+				if (!bWrite) break;
+				if (!dw) break;
+
+				p += dw;
+				len -= dw;
+			}
+
+			channel++;
+		}
+	}
+}
 
 static DWORD CALLBACK output_thread(LPVOID pv)
 {
 	struct conlog_output* state = pv;
 	char buf[4096];
-	DWORD offset = 0;
 	DWORD dwRead;
+	int colonCount = 0;
+	int digitCount = 0;
+	int escapeCommittee = 0;
+	int args[5];
+	char escapeRoom[128];
+	int escapeLen = 0;
 
-	while (ReadFile(state->hRead, buf + offset, sizeof(buf) - offset, &dwRead, NULL))
+	while (ReadFile(state->hRead, buf, sizeof(buf), &dwRead, NULL))
 	{
-		int nChannels = state->nChannels;
-		struct conlog_output_channel* channel = state->channels;
+		const char* input = buf;
+		DWORD offset = 0;
 
 		if (dwRead == 0) break;
 
-		while (nChannels--)
+		while (offset < dwRead)
 		{
-			const BYTE* p = buf;
-			DWORD len = dwRead + offset;
+			char c = input[offset];
 
-			while (len)
+			if (escapeLen)
 			{
-				DWORD dwWrite;
-				BOOL bWrite;
-
-				if (channel->bConsole)
+				if (escapeLen < sizeof(escapeRoom))
 				{
-					bWrite = WriteConsoleA(channel->hWrite, p, len, &dwWrite, NULL);
+					escapeRoom[escapeLen++] = c;
+					offset++;
+
+					switch (escapeCommittee)
+					{
+					case 1:
+						if (c == '[')
+						{
+							colonCount = 0;
+							digitCount = 0;
+							escapeCommittee = 2;
+							args[0] = 0;
+						}
+						else
+						{
+							conlog_output_write(state, escapeRoom, escapeLen);
+							escapeCommittee = 0;
+							escapeLen = 0;
+							input += offset;
+							dwRead -= offset;
+							offset = 0;
+						}
+						break;
+					case 2:
+					case 3:
+						switch (c)
+						{
+						case ';':
+							if (colonCount < (sizeof(args) / sizeof(args[0])))
+							{
+								args[colonCount++] = 0;
+								digitCount = 0;
+							}
+							break;
+						case '?':
+							if (escapeCommittee == 2 && colonCount == 0 && digitCount == 0)
+							{
+								escapeCommittee = 3;
+							}
+							else
+							{
+								conlog_output_write(state, escapeRoom, escapeLen);
+								escapeCommittee = 0;
+								escapeLen = 0;
+								input += offset;
+								dwRead -= offset;
+								offset = 0;
+							}
+							break;
+						default:
+							if (isdigit(c))
+							{
+								if (colonCount < (sizeof(args) / sizeof(args[0])))
+								{
+									args[colonCount] = (args[colonCount] * 10) + (c - '0');
+									digitCount++;
+								}
+							}
+							else
+							{
+								switch (escapeCommittee)
+								{
+								case 3:
+									switch (c)
+									{
+									case 'h':
+										if (digitCount && (args[0] == 1004))
+										{
+											if (!state->input->reportFocus)
+											{
+												DWORD dw;
+												state->input->appFocus = !state->input->hasFocus;
+												state->input->reportFocus = TRUE;
+												if (WriteFile(state->hControl, "\001", 1, &dw, NULL) && dw)
+												{
+													SetEvent(state->input->hEvent);
+												}
+											}
+										}
+										break;
+									case 'l':
+										if (digitCount && (args[0] == 1004))
+										{
+											state->input->reportFocus = FALSE;
+										}
+										break;
+									}
+									break;
+								case 2:
+									switch (c)
+									{
+									case 'n':
+										if (digitCount && (args[0] == 6))
+										{
+											DWORD dw;
+
+											if (WriteFile(state->hControl, "\002", 1, &dw, NULL) && dw)
+											{
+												SetEvent(state->input->hEvent);
+												escapeLen = 0;
+											}
+										}
+										break;
+									}
+									break;
+								}
+								conlog_output_write(state, escapeRoom, escapeLen);
+								escapeCommittee = 0;
+								escapeLen = 0;
+								input += offset;
+								dwRead -= offset;
+								offset = 0;
+							}
+							break;
+						}
+						break;
+					default:
+						break;
+					}
 				}
 				else
 				{
-					bWrite = WriteFile(channel->hWrite, p, len, &dwWrite, NULL);
+					conlog_output_write(state, escapeRoom, escapeLen);
+					escapeCommittee = 0;
+					escapeLen = 0;
+					input += offset;
+					dwRead -= offset;
+					offset = 0;
 				}
-
-				if (!bWrite) break;
-				if (!dwWrite) break;
-
-				p += dwWrite;
-				len -= dwWrite;
 			}
+			else
+			{
+				if (c == 27)
+				{
+					conlog_output_write(state, input, offset);
 
-			channel++;
+					escapeRoom[escapeLen++] = c;
+					offset++;
+					dwRead -= offset;
+					input += offset;
+					offset = 0;
+					escapeCommittee = 1;
+				}
+				else
+				{
+					offset++;
+				}
+			}
 		}
+
+		conlog_output_write(state, input, offset);
 	}
 
 	return 0;
@@ -80,106 +256,180 @@ static DWORD CALLBACK output_thread(LPVOID pv)
 static DWORD CALLBACK input_thread(LPVOID pv)
 {
 	struct conlog_input* state = pv;
+	BOOL running = TRUE;
 
-	while (TRUE)
+	while (state->running && running)
 	{
-		HANDLE hEvent[] = { state->hRead,state->hQuit };
+		HANDLE hEvent[] = { state->hRead,state->hEvent };
 		INPUT_RECORD input;
-		DWORD dw;
+		DWORD dw = WaitForMultipleObjects(2, hEvent, FALSE, INFINITE);
 
-		if (WAIT_OBJECT_0 != WaitForMultipleObjects(2, hEvent, FALSE, INFINITE))
+		switch (dw)
 		{
-			break;
-		}
+		case WAIT_OBJECT_0:
+			running = ReadConsoleInput(state->hRead, &input, 1, &dw);
 
-		if (!ReadConsoleInput(state->hRead, &input, 1, &dw))
-		{
-			break;
-		}
-
-		switch (input.EventType)
-		{
-		case WINDOW_BUFFER_SIZE_EVENT:
-			ResizePseudoConsole(state->hPC, input.Event.WindowBufferSizeEvent.dwSize);
-			break;
-
-		case KEY_EVENT:
-			if (input.Event.KeyEvent.bKeyDown)
+			if (running)
 			{
-				char read_buffer[256];
-				int read_len = 0;
-
-				if (input.Event.KeyEvent.uChar.UnicodeChar)
+				switch (input.EventType)
 				{
-					wchar_t wide = input.Event.KeyEvent.uChar.UnicodeChar;
+				case WINDOW_BUFFER_SIZE_EVENT:
+					ResizePseudoConsole(state->hPC, input.Event.WindowBufferSizeEvent.dwSize);
+					break;
 
-					read_len = WideCharToMultiByte(CP_UTF8, 0, &wide, 1, read_buffer, sizeof(read_buffer), NULL, NULL);
-				}
-				else
-				{
-					char code = 0;
-					int arg = 0;
-
-					switch (input.Event.KeyEvent.wVirtualKeyCode)
+				case KEY_EVENT:
+					if (input.Event.KeyEvent.bKeyDown)
 					{
-					case VK_ESCAPE:
-						code = 'P';
-						break;
-					case VK_END:
-						code = '~'; arg = 4;
-						break;
-					case VK_PRIOR:
-						code = '~'; arg = 5;
-						break;
-					case VK_NEXT:
-						code = '~'; arg = 6;
-						break;
-					case VK_HOME:
-						code = '~'; arg = 1;
-						break;
-					case VK_INSERT:
-						code = '~'; arg = 2;
-						break;
-					case VK_DELETE:
-						code = '~'; arg = 3;
-						break;
-					case VK_LEFT:
-						code = 'D';
-						break;
-					case VK_RIGHT:
-						code = 'C';
-						break;
-					case VK_UP:
-						code = 'A';
-						break;
-					case VK_DOWN:
-						code = 'B';
-						break;
-					}
+						char read_buffer[256];
+						int read_len = 0;
 
-					if (code)
-					{
-						read_buffer[read_len++] = 27;
-
-						if (arg)
+						if (input.Event.KeyEvent.uChar.UnicodeChar)
 						{
-							read_len += sprintf_s(read_buffer + read_len, sizeof(read_buffer) - read_len, "[%d%c", arg, code);
+							wchar_t wide = input.Event.KeyEvent.uChar.UnicodeChar;
+
+							read_len = WideCharToMultiByte(CP_UTF8, 0, &wide, 1, read_buffer, sizeof(read_buffer), NULL, NULL);
 						}
 						else
 						{
-							read_buffer[read_len++] = '[';
-							read_buffer[read_len++] = code;
+							char code = 0;
+							int argc = 0;
+							int argv[10];
+
+							switch (input.Event.KeyEvent.wVirtualKeyCode)
+							{
+							case VK_ESCAPE:
+								code = 'P';
+								break;
+							case VK_END:
+								code = '~'; argv[argc++] = 4;
+								break;
+							case VK_PRIOR:
+								code = '~'; argv[argc++] = 5;
+								break;
+							case VK_NEXT:
+								code = '~'; argv[argc++] = 6;
+								break;
+							case VK_HOME:
+								code = '~'; argv[argc++] = 1;
+								break;
+							case VK_INSERT:
+								code = '~'; argv[argc++] = 2;
+								break;
+							case VK_DELETE:
+								code = '~'; argv[argc++] = 3;
+								break;
+							case VK_LEFT:
+								code = 'D';
+								break;
+							case VK_RIGHT:
+								code = 'C';
+								break;
+							case VK_UP:
+								code = 'A';
+								break;
+							case VK_DOWN:
+								code = 'B';
+								break;
+							}
+
+							if (code)
+							{
+								int i = 0;
+								read_buffer[read_len++] = 27;
+								read_buffer[read_len++] = '[';
+
+								while (i < argc)
+								{
+									if (i)
+									{
+										read_buffer[read_len++] = ';';
+									}
+
+									read_len += sprintf_s(read_buffer + read_len, sizeof(read_buffer) - read_len, "%d", argv[i++]);
+								}
+
+								read_buffer[read_len++] = code;
+							}
+						}
+
+						if (read_len)
+						{
+							running = WriteFile(state->hWrite, read_buffer, read_len, &dw, NULL) && (dw == read_len);
 						}
 					}
-				}
 
-				if (read_len)
-				{
-					DWORD dw;
-					WriteFile(state->hWrite, read_buffer, read_len, &dw, NULL);
+					break;
+
+				case FOCUS_EVENT:
+					state->hasFocus = input.Event.FocusEvent.bSetFocus;
+
+					if (state->reportFocus && (state->hasFocus != state->appFocus))
+					{
+						state->appFocus = state->hasFocus;
+
+						WriteFile(state->hWrite, input.Event.FocusEvent.bSetFocus ? "\033[I" : "\033[O", 3, &dw, NULL);
+					}
+
+					break;
+
+				default:
+					running = FALSE;
+					break;
 				}
 			}
 
+			break;
+		case WAIT_OBJECT_0 + 1:
+			while (running && state->running)
+			{
+				BYTE buf[1] = { 0 };
+				DWORD totalBytesAvailable = 0, bytesLeftInThisMessage = 0;
+
+				running = PeekNamedPipe(state->hControl, NULL, 0, &dw, &totalBytesAvailable, &bytesLeftInThisMessage);
+
+				if (running && totalBytesAvailable)
+				{
+					running = ReadFile(state->hControl, buf, 1, &dw, NULL) && (dw == 1);
+
+					if (running)
+					{
+						CONSOLE_SCREEN_BUFFER_INFO screen;
+
+						switch (buf[0])
+						{
+						case 0:
+							running = FALSE;
+							break;
+						case 1:
+							if (state->reportFocus && (state->hasFocus != state->appFocus))
+							{
+								state->appFocus = state->hasFocus;
+								running = WriteFile(state->hWrite, state->hasFocus ? "\033[I" : "\033[O", 3, &dw, NULL);
+							}
+							break;
+
+						case 2:
+							running = GetConsoleScreenBufferInfo(state->hScreen, &screen);
+
+							if (running)
+							{
+								char response[32];
+								int i = sprintf_s(response, sizeof(response), "\033[%d;%dR", screen.dwCursorPosition.Y + 1, screen.dwCursorPosition.X + 1);
+								running = WriteFile(state->hWrite, response, i, &dw, NULL);
+							}
+
+							break;
+						}
+					}
+				}
+				else
+				{
+					break;
+				}
+			}
+			break;
+		default:
+			running = FALSE;
 			break;
 		}
 	}
@@ -208,6 +458,18 @@ int main(int argc, char** argv)
 	ZeroMemory(&output, sizeof(output));
 	ZeroMemory(&input, sizeof(input));
 
+	output.input = &input;
+
+	if (!CreatePipe(&input.hControl, &output.hControl, NULL, 0))
+	{
+		exitCode = GetLastError();
+
+		fprintf(stderr, "Failed to create internal pipe\n");
+		fflush(stderr);
+
+		return exitCode;
+	}
+
 	input.hRead = GetStdHandle(STD_INPUT_HANDLE);
 
 	if (!GetConsoleMode(input.hRead, &input.mode))
@@ -230,7 +492,7 @@ int main(int argc, char** argv)
 		return exitCode;
 	}
 
-	input.hQuit = CreateEvent(NULL, FALSE, FALSE, NULL);
+	input.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 
 	output.channels[0].cp = CP_UTF8;
 	output.channels[0].hWrite = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -270,6 +532,8 @@ int main(int argc, char** argv)
 	{
 		SetStdHandle(STD_ERROR_HANDLE, output.channels[0].hWrite);
 	}
+
+	input.hScreen = GetStdHandle(STD_OUTPUT_HANDLE);
 
 	SetConsoleOutputCP(CP_UTF8);
 
@@ -345,7 +609,7 @@ int main(int argc, char** argv)
 
 		if (CreatePipe(&inputReadSide, &inputWriteSide, NULL, 0) && CreatePipe(&outputReadSide, &outputWriteSide, NULL, 0))
 		{
-			HRESULT hr = CreatePseudoConsole(info.dwSize, inputReadSide, outputWriteSide, 0, &input.hPC);
+			HRESULT hr = CreatePseudoConsole(info.dwSize, inputReadSide, outputWriteSide, PSEUDOCONSOLE_INHERIT_CURSOR, &input.hPC);
 
 			if (SUCCEEDED(hr))
 			{
@@ -400,6 +664,7 @@ int main(int argc, char** argv)
 							{
 								DWORD ex;
 
+								input.running = TRUE;
 								input.hWrite = inputWriteSide;
 								output.hRead = outputReadSide;
 
@@ -423,7 +688,8 @@ int main(int argc, char** argv)
 											exitCode = GetLastError();
 										}
 
-										SetEvent(input.hQuit);
+										input.running = FALSE;
+										SetEvent(input.hEvent);
 
 										WaitForSingleObject(threadInput, INFINITE);
 										CloseHandle(threadInput);
