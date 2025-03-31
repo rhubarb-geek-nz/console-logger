@@ -331,7 +331,22 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 						{
 							wchar_t wide = input.Event.KeyEvent.uChar.UnicodeChar;
 
-							read_len = WideCharToMultiByte(CP_UTF8, 0, &wide, 1, read_buffer, sizeof(read_buffer), NULL, NULL);
+							switch (wide)
+							{
+							case ' ':
+								if (input.Event.KeyEvent.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+								{
+									read_buffer[read_len++] = 0;
+								}
+								else
+								{
+									read_buffer[read_len++] = ' ';
+								}
+								break;
+							default:
+								read_len = WideCharToMultiByte(CP_UTF8, 0, &wide, 1, read_buffer, sizeof(read_buffer), NULL, NULL);
+								break;
+							}
 						}
 						else
 						{
@@ -376,41 +391,45 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 							case VK_ESCAPE:
 								code = 'P';
 								break;
-							case VK_END:
-								code = '~'; argv[argc++] = 4;
-								break;
-							case VK_PRIOR:
-								code = '~'; argv[argc++] = 5;
-								break;
-							case VK_NEXT:
-								code = '~'; argv[argc++] = 6;
-								break;
-							case VK_HOME:
-								code = '~'; argv[argc++] = 1;
-								break;
-							case VK_INSERT:
-								code = '~'; argv[argc++] = 2;
-								break;
-							case VK_DELETE:
-								code = '~'; argv[argc++] = 3;
-								break;
-							case VK_LEFT:
-								code = 'D';
-								break;
-							case VK_RIGHT:
-								code = 'C';
-								break;
 							case VK_UP:
+								if (shift)
+								{
+									argv[argc++] = 1;
+								}
 								code = 'A';
 								break;
 							case VK_DOWN:
+								if (shift)
+								{
+									argv[argc++] = 1;
+								}
 								code = 'B';
+								break;
+							case VK_RIGHT:
+								if (shift)
+								{
+									argv[argc++] = 1;
+								}
+								code = 'C';
+								break;
+							case VK_LEFT:
+								if (shift)
+								{
+									argv[argc++] = 1;
+								}
+								code = 'D';
+								break;
+							case VK_CLEAR:
+								if (shift)
+								{
+									argv[argc++] = 1;
+								}
+								code = 'E';
 								break;
 							case VK_F1:
 								if (shift)
 								{
 									argv[argc++] = 1;
-									argv[argc++] = shift;
 								}
 								else
 								{
@@ -422,7 +441,6 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 								if (shift)
 								{
 									argv[argc++] = 1;
-									argv[argc++] = shift;
 								}
 								else
 								{
@@ -434,7 +452,6 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 								if (shift)
 								{
 									argv[argc++] = 1;
-									argv[argc++] = shift;
 								}
 								else
 								{
@@ -446,7 +463,6 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 								if (shift)
 								{
 									argv[argc++] = 1;
-									argv[argc++] = shift;
 								}
 								else
 								{
@@ -454,37 +470,47 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 								}
 								code = 'S';
 								break;
+							case VK_HOME:
+								code = '~'; argv[argc++] = 1;
+								break;
+							case VK_INSERT:
+								code = '~'; argv[argc++] = 2;
+								break;
+							case VK_DELETE:
+								code = '~'; argv[argc++] = 3;
+								break;
+							case VK_END:
+								code = '~'; argv[argc++] = 4;
+								break;
+							case VK_PRIOR:
+								code = '~'; argv[argc++] = 5;
+								break;
+							case VK_NEXT:
+								code = '~'; argv[argc++] = 6;
+								break;
 							case VK_F5:
 								code = '~'; argv[argc++] = 15;
-								if (shift) argv[argc++] = shift;
 								break;
 							case VK_F6:
 								code = '~'; argv[argc++] = 17;
-								if (shift) argv[argc++] = shift;
 								break;
 							case VK_F7:
 								code = '~'; argv[argc++] = 18;
-								if (shift) argv[argc++] = shift;
 								break;
 							case VK_F8:
 								code = '~'; argv[argc++] = 19;
-								if (shift) argv[argc++] = shift;
 								break;
 							case VK_F9:
 								code = '~'; argv[argc++] = 20;
-								if (shift) argv[argc++] = shift;
 								break;
 							case VK_F10:
 								code = '~'; argv[argc++] = 21;
-								if (shift) argv[argc++] = shift;
 								break;
 							case VK_F11:
 								code = '~'; argv[argc++] = 23;
-								if (shift) argv[argc++] = shift;
 								break;
 							case VK_F12:
 								code = '~'; argv[argc++] = 24;
-								if (shift) argv[argc++] = shift;
 								break;
 							}
 
@@ -493,6 +519,11 @@ static DWORD CALLBACK input_thread(LPVOID pv)
 								int i = 0;
 								read_buffer[read_len++] = 27;
 								read_buffer[read_len++] = cis;
+
+								if (shift && argc)
+								{
+									argv[argc++] = shift;
+								}
 
 								while (i < argc)
 								{
